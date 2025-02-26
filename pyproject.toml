@@ -1,0 +1,31 @@
+[project]
+name = "wip"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "martinbombin",email = "martn.b.o@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "beautifulsoup4 (>=4.13.3,<5.0.0)",
+    "selenium (>=4.28.1,<5.0.0)",
+    "undetected-chromedriver (>=3.5.5,<4.0.0)",
+    "setuptools (>=75.8.0,<76.0.0)",
+    "webdriver-manager (>=4.0.2,<5.0.0)",
+    "pydantic (>=2.10.6,<3.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.5"
+
+[tool.ruff.lint]
+select = ["ALL"]
+
+[tool.ruff]
+line-length = 72

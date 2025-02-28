@@ -142,7 +142,7 @@ class Content(BaseModel):
                 current_texts.append(child.get_text())
                 have_text = True
             elif child.name in ["h3", "h4"]:
-                current_texts.append(child.get_text() + "\n")
+                current_texts.append("\n" + child.get_text() + "\n")
             elif child.name == "dl":
                 dl_text = extract_dl_text(child)
                 if dl_text:

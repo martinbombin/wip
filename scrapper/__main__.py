@@ -6,7 +6,7 @@ import undetected_chromedriver as uc
 from selenium.webdriver.chrome.options import Options
 
 from .crawler import Crawler
-from .utils import async_timer
+from .utils import async_timer, timer
 
 # import schedule
 
@@ -30,51 +30,90 @@ def init_browser():
     )
 
 
-async def set_page_content(page, browser, loop):
+def set_page_content(page):
     """Set content for a page using a threadpool executor."""
-    # Run blocking function in a thread
-    await loop.run_in_executor(None, page.set_content, browser)
-
-
-@async_timer
-async def crawl_all_categories():
-    loop = asyncio.get_running_loop()
-
-    # Start browser in a separate thread
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        browser = await loop.run_in_executor(executor, init_browser)
-
+    try:
+        browser = init_browser()
         try:
-            crawler = Crawler()
-            crawler.load_categories("categories.json")
-
-            # Gather all tasks
-            tasks = [
-                set_page_content(page, browser, loop)
-                for cat in crawler.categories
-                for page in cat.pages
-            ]
-            await asyncio.gather(*tasks)
-
-            # Logging after all pages are processed
-            for cat in crawler.categories:
-                for page in cat.pages:
-                    if page.content is None:
-                        logging.info(
-                            "Page content is None for page: %s",
-                            page.url,
-                        )
-
-            crawler.save_categories("scrapped_async_100.json")
-
+            page.set_content(browser)
+        except Exception as e:
+            logging.exception(
+                "Error processing page %s: %s",
+                page.url,
+                e,
+            )
         finally:
             browser.quit()
+    except Exception as e:
+        logging.exception(
+            "Error with browser creation for page %s: %s",
+            page.url,
+            e,
+        )
+
+
+def get_page(title: str, crawler: Crawler):
+    for category in crawler.categories:
+        if category.name == title[0]:
+            for page in category.pages:
+                if page.title == title:
+                    return page
+    return None
 
 
 @async_timer
+async def scrap_categories(max_workers: int = 5):
+    crawler = Crawler()
+    # crawler.set_categories(browser)
+    # crawler.save_categories("categories.json")
+    crawler.load_categories("categories.json")
+
+    pages = [page for cat in crawler.categories for page in cat.pages]
+    max_workers = min(5, len(pages))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        list(executor.map(set_page_content, pages))
+
+    crawler.save_categories("scrapped_test.json")
+
+
+@timer
+def scrap_page(page_title: str):
+    crawler = Crawler()
+    crawler.load_categories("categories.json")
+    page = get_page(page_title, crawler)
+    if page is not None:
+        browser = init_browser()
+        page.set_content(browser)
+        browser.quit()
+        for cs in page.content.content_sections:
+            logging.info(
+                "Tittle: %s\n%s\n",
+                cs.title,
+                cs.content,
+            )
+
+
+def log_page(page_title: str):
+    crawler = Crawler()
+    crawler.load_categories("scrapped.json")
+    page = get_page(page_title, crawler)
+    if page is not None:
+        for cs in page.content.content_sections:
+            logging.info(
+                "Tittle: %s\n%s\n",
+                cs.title,
+                cs.content,
+            )
+
+
 async def main():
     """Main async function to initialize the browser and process pages in parallel."""
-    await crawl_all_categories()
+    # await scrap_categories()
+
+    # log_page(page_title="Hoid")
+
+    # scrap_page(page_title="Hoid")
 
 
 if __name__ == "__main__":

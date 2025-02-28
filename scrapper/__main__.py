@@ -45,7 +45,7 @@ async def crawl_all_categories():
         browser = await loop.run_in_executor(executor, init_browser)
 
         try:
-            crawler = Crawler(chrome_driver=browser)
+            crawler = Crawler()
             crawler.load_categories("categories.json")
 
             # Gather all tasks

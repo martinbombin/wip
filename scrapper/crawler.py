@@ -23,7 +23,7 @@ logging.basicConfig(
 
 
 class Crawler:
-    def __init__(self, chrome_driver: uc.Chrome) -> None:
+    def __init__(self) -> None:
         self.categories: list[Category] = []
 
     def save_categories(self, filename: str) -> None:

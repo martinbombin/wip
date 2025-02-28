@@ -10,13 +10,19 @@ Classes:
 
 """
 
+import logging
 import time
 
 import undetected_chromedriver as uc
 from bs4 import BeautifulSoup
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from .utils import extract_dl_text
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
 
 class InfoBoxSection(BaseModel):
@@ -55,9 +61,6 @@ class InfoBox(BaseModel):
 
         Args:
             infobox_table (bs4.element.Tag): A BeautifulSoup Tag object representing the infobox table.
-
-        Returns:
-            None
 
         """
         rows = infobox_table.find_all("tr")
@@ -117,9 +120,6 @@ class Content(BaseModel):
 
         Args:
             content_container (Any): The container holding the content sections.
-
-        Returns:
-            None
 
         """
         current_title = ""
@@ -209,6 +209,8 @@ class Page(BaseModel):
 
     _page_source: BeautifulSoup | None = None
 
+    model_config = ConfigDict(json_encoders={HttpUrl: str})
+
     def _set_page_source(
         self,
         driver: uc.Chrome,
@@ -236,9 +238,6 @@ class Page(BaseModel):
         Args:
             driver (uc.Chrome): The web driver used to retrieve the page source.
 
-        Returns:
-            None
-
         """
         if self._page_source is None:
             self._set_page_source(driver)
@@ -263,9 +262,6 @@ class Page(BaseModel):
 
         Args:
             driver (uc.Chrome): The web driver instance used to fetch the page source.
-
-        Returns:
-            None
 
         """
         if self._page_source is None:

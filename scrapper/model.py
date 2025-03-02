@@ -10,6 +10,7 @@ Classes:
 
 """
 
+import asyncio
 import logging
 import time
 
@@ -17,7 +18,7 @@ import undetected_chromedriver as uc
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
-from .utils import extract_dl_text
+from . import utils
 
 logging.basicConfig(
     level=logging.INFO,
@@ -100,6 +101,9 @@ class ContentSection(BaseModel):
     title: str
     content: str
 
+    def __str__(self):
+        return f"{self.title}\n{self.content}"
+
 
 class Content(BaseModel):
     """A model representing content with multiple sections.
@@ -115,6 +119,11 @@ class Content(BaseModel):
 
     content_sections: list[ContentSection] = Field(default_factory=list)
 
+    def __str__(self):
+        return "\n".join(
+            [str(section) for section in self.content_sections],
+        )
+
     def set_info_content_sections(self, content_container) -> None:
         """Parse the content container and sets the content sections.
 
@@ -122,6 +131,22 @@ class Content(BaseModel):
             content_container (Any): The container holding the content sections.
 
         """
+
+        def _get_title_from_h2(child) -> str:
+            headline = child.find("span", class_="mw-headline")
+            if headline:
+                return headline.get_text(strip=True)
+            return child.get_text(strip=True)
+
+        def _get_content_section(
+            current_title: str,
+            current_texts: list[str],
+        ) -> ContentSection:
+            return ContentSection(
+                title=current_title,
+                content="".join(current_texts).replace("[edit]", ""),
+            )
+
         current_title = ""
         current_texts = []
         have_text = False
@@ -131,12 +156,14 @@ class Content(BaseModel):
 
             if child.name == "h2":
                 if have_text:
-                    self._handle_h2_tag(
-                        current_title,
-                        current_texts,
+                    self.content_sections.append(
+                        _get_content_section(
+                            current_title,
+                            current_texts,
+                        ),
                     )
                 current_texts = []
-                current_title = self._extract_title_from_h2(child)
+                current_title = _get_title_from_h2(child)
                 have_text = False
             elif child.name in ["p"]:
                 current_texts.append(child.get_text())
@@ -144,40 +171,14 @@ class Content(BaseModel):
             elif child.name in ["h3", "h4"]:
                 current_texts.append("\n" + child.get_text() + "\n")
             elif child.name == "dl":
-                dl_text = extract_dl_text(child)
+                dl_text = utils.extract_dl_text(child)
                 if dl_text:
                     current_texts.append(dl_text)
 
         if have_text:
-            self._save_content_section(current_title, current_texts)
-
-    def _handle_h2_tag(
-        self,
-        current_title: str,
-        current_texts: list[str],
-    ) -> None:
-        content_section = ContentSection(
-            title=current_title,
-            content="".join(current_texts).replace("[edit]", ""),
-        )
-        self.content_sections.append(content_section)
-
-    def _extract_title_from_h2(self, child) -> str:
-        headline = child.find("span", class_="mw-headline")
-        if headline:
-            return headline.get_text(strip=True)
-        return child.get_text(strip=True)
-
-    def _save_content_section(
-        self,
-        current_title: str,
-        current_texts: list[str],
-    ) -> None:
-        content_section = ContentSection(
-            title=current_title,
-            content="".join(current_texts).replace("[edit]", ""),
-        )
-        self.content_sections.append(content_section)
+            self.content_sections.append(
+                _get_content_section(current_title, current_texts),
+            )
 
 
 class Page(BaseModel):
@@ -211,6 +212,9 @@ class Page(BaseModel):
 
     model_config = ConfigDict(json_encoders={HttpUrl: str})
 
+    def __str__(self):
+        return f"Title: {self.title}\nURL: {self.url}\nInfo Box: {self.info_box}\nContent: {self.content}"
+
     def _set_page_source(
         self,
         driver: uc.Chrome,
@@ -227,7 +231,7 @@ class Page(BaseModel):
         # Parse the page source with BeautifulSoup
         self._page_source = BeautifulSoup(page_source, "html.parser")
 
-    def set_info_box(self, driver: uc.Chrome) -> None:
+    def _set_info_box(self, driver: uc.Chrome) -> None:
         """Set the information box for the current page using the provided web driver.
 
         This method retrieves the page source if it is not already set, finds the
@@ -257,7 +261,7 @@ class Page(BaseModel):
 
             self.info_box.set_info_box_sections(infobox_table)
 
-    def set_content(self, driver: uc.Chrome) -> None:
+    def _set_content(self, driver: uc.Chrome) -> None:
         """Set the content of the page by extracting information from the web driver.
 
         Args:
@@ -274,6 +278,18 @@ class Page(BaseModel):
         self.content = Content()
         self.content.set_info_content_sections(content_container)
 
+    def scrape_content(self) -> None:
+        """Scrape the content of the page using a browser instance."""
+        try:
+            with utils.init_browser() as browser:
+                self._set_content(browser)
+        except Exception as e:
+            logging.exception(
+                "Error processing page %s: %s",
+                self.url,
+                e,
+            )
+
 
 class Category(BaseModel):
     """Represent a category that contains a list of pages.
@@ -286,3 +302,30 @@ class Category(BaseModel):
 
     name: str
     pages: list[Page]
+
+    def __str__(self):
+        return f"Category: {self.name}\nPages: {', '.join([page.title for page in self.pages])}"
+
+    def get_page(self, title: str) -> Page | None:
+        for page in self.pages:
+            if page.title == title:
+                return page
+        return None
+
+    def scrape_page(self, title: str) -> Page | None:
+        page = self.get_page(title)
+        if page is not None:
+            page.scrape_content()
+
+    async def scrape_pages(self, max_workers: int = 5) -> None:
+        semaphore = asyncio.Semaphore(max_workers)
+
+        async def scrape_with_limit(page: Page):
+            async with semaphore:
+                await asyncio.to_thread(
+                    page.scrape_content,
+                )  # Run in a thread
+
+        await asyncio.gather(
+            *(scrape_with_limit(page) for page in self.pages),
+        )

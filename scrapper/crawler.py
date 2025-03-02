@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import time
@@ -14,7 +15,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from scrapper.model import Category
 
-from .model import Page
+from . import model
 
 logging.basicConfig(
     level=logging.INFO,
@@ -159,13 +160,13 @@ class Crawler:
                 # Get all the links inside the <ul> list
                 links = group.find_elements(By.CSS_SELECTOR, "ul li a")
 
-                # Create a list of Page objects
+                # Create a list of model.Page objects
                 pages = []
                 for link in links:
                     url = link.get_attribute("href")
                     if url is not None:
                         pages.append(
-                            Page(
+                            model.Page(
                                 title=link.text,
                                 url=HttpUrl(url),
                             ),
@@ -191,3 +192,55 @@ class Crawler:
             category_groups=category_groups,
         )
         logging.info("Categories set suscesfully")
+
+    def get_category(self, name: str) -> Category | None:
+        """Get a category by name.
+
+        Args:
+            name (str): The name of the category to retrieve.
+
+        Returns:
+            Category | None: The Category object if found, else None.
+
+        """
+        for category in self.categories:
+            if category.name == name:
+                return category
+        return None
+
+    def scrape_page(self, page_title: str):
+        category = self.get_category(page_title[0])
+        if category is not None:
+            category.scrape_page(page_title)
+
+    def log_page(self, page_title: str):
+        category = self.get_category(page_title[0])
+        if category is not None:
+            page = category.get_page(page_title)
+            logging.info(
+                "Page: %s\n",
+                str(page),
+            )
+
+    async def scrape_categories(
+        self,
+        max_workers: int = 1,
+        max_workers_page: int = 5,
+    ):
+        """Scrape all categories asynchronously."""
+        semaphore = asyncio.Semaphore(
+            max_workers,
+        )  # Limit categories
+
+        async def scrape_with_limit(category: Category):
+            async with semaphore:
+                await category.scrape_pages(
+                    max_workers=max_workers_page,
+                )
+
+        await asyncio.gather(
+            *(
+                scrape_with_limit(category)
+                for category in self.categories
+            ),
+        )

@@ -19,24 +19,29 @@ logging.basicConfig(level=logging.INFO)
 
 
 @asynccontextmanager
-async def async_timer():
+async def async_timer(misc: str = "Code block"):
     start_time = time.time()
     try:
-        yield  # Execution pauses here while the code inside `async with` runs
+        yield
     finally:
         elapsed_time = time.time() - start_time
         logging.info(
-            "Code block executed in %.4f seconds",
+            "%s executed in %.4f seconds",
+            misc,
             elapsed_time,
         )
 
 
 @contextmanager
-def timer():
+def timer(misc: str = "Code block") -> Generator[None]:
     start_time = time.time()
     yield  # Code inside the "with" block executes here
     elapsed_time = time.time() - start_time
-    logging.info("Code block executed in %.4f seconds", elapsed_time)
+    logging.info(
+        "%s executed in %.4f seconds",
+        misc,
+        elapsed_time,
+    )
 
 
 @contextmanager

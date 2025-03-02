@@ -13,7 +13,12 @@ logging.basicConfig(
 async def main():
     """Main async function to initialize the browser and process pages in parallel."""
     crawler = Crawler()
-    crawler.load_categories("categories.json")
+    with (
+        utils.init_browser() as browser,
+        utils.timer(misc="Set categories"),
+    ):
+        crawler.set_categories(chrome_driver=browser)
+    # crawler.load_categories("categories.json")
 
     # async with utils.async_timer():
     #     await crawler.scrape_categories(
@@ -22,10 +27,10 @@ async def main():
     #     )
     # crawler.save_categories("scrapped_test.json")
 
-    with utils.timer():
+    with utils.timer(misc="Scrape page"):
         crawler.scrape_page(page_title="Glyphward")
 
-    crawler.log_page(page_title="Glyphward")
+    # crawler.log_page(page_title="Glyphward")
 
 
 if __name__ == "__main__":
